@@ -31,35 +31,97 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [serviceFilter, setServiceFilter] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState<number>(15);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState<number>(20);
   const [stopsState, setStopsState] = useState<BusStop[]>(busStops);
+  const [isLiveApi, setIsLiveApi] = useState<boolean>(false);
+  const [apiNotice, setApiNotice] = useState<string>('');
 
   // Synchronize when parent prop updates
   useEffect(() => {
     setStopsState(busStops);
   }, [busStops]);
 
-  // Live countdown timer simulation
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsUntilRefresh((prev) => {
-        if (prev <= 1) {
-          triggerRefreshTelemetry();
-          return 15;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [selectedStopCode]);
-
-  // Simulated live telemetry refresh
-  const triggerRefreshTelemetry = () => {
+  // Fetch live telemetry from /api/bus-arrival
+  const fetchTelemetry = async (stopCode: string, svcFilter?: string) => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setStopsState((prevStops) =>
-        prevStops.map((stop) => ({
+    try {
+      let url = `/api/bus-arrival?BusStopCode=${encodeURIComponent(stopCode)}`;
+      if (svcFilter && svcFilter.trim()) {
+        url += `&ServiceNo=${encodeURIComponent(svcFilter.trim())}`;
+      }
+
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.formattedServices && data.formattedServices.length > 0) {
+          setIsLiveApi(true);
+          setApiNotice('Live LTA DataMall v3 Feed Active');
+          setStopsState((prevStops) => {
+            const mappedServices: BusServiceArrival[] = data.formattedServices.map((fs: any) => ({
+              serviceNo: fs.serviceNo,
+              destinationName: `Dest Code ${fs.nextBus?.destinationCode || 'Loop'}`,
+              operator: (fs.operator === 'SBST' ? 'SBS Transit' : fs.operator === 'SMRT' ? 'SMRT Buses' : fs.operator === 'TTS' ? 'Tower Transit' : 'Go-Ahead') as any,
+              nextBus: {
+                estimatedArrivalMin: fs.nextBus?.estimatedArrivalMin ?? 0,
+                load: (fs.nextBus?.load || 'SEA') as any,
+                busType: (fs.nextBus?.type || 'SD') as any,
+                wheelchairAccessible: fs.nextBus?.feature === 'WAB'
+              },
+              subsequentBus: fs.nextBus2 ? {
+                estimatedArrivalMin: fs.nextBus2?.estimatedArrivalMin ?? 0,
+                load: (fs.nextBus2?.load || 'SEA') as any,
+                busType: (fs.nextBus2?.type || 'SD') as any,
+                wheelchairAccessible: fs.nextBus2?.feature === 'WAB'
+              } : undefined,
+              thirdBus: fs.nextBus3 ? {
+                estimatedArrivalMin: fs.nextBus3?.estimatedArrivalMin ?? 0,
+                load: (fs.nextBus3?.load || 'SEA') as any,
+                busType: (fs.nextBus3?.type || 'SD') as any,
+                wheelchairAccessible: fs.nextBus3?.feature === 'WAB'
+              } : undefined
+            }));
+
+            const exists = prevStops.some((s) => s.code === stopCode);
+            if (exists) {
+              return prevStops.map((s) => (s.code === stopCode ? { ...s, services: mappedServices } : s));
+            } else {
+              return [
+                ...prevStops,
+                {
+                  code: stopCode,
+                  name: `Bus Stop ${stopCode}`,
+                  roadName: 'LTA Transit Network',
+                  services: mappedServices
+                }
+              ];
+            }
+          });
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setIsLiveApi(false);
+        if (res.status === 503) {
+          setApiNotice('LTA Endpoint (/api/bus-arrival) ready. Set LTA_ACCOUNT_KEY in Vercel to activate live feed.');
+        } else {
+          setApiNotice(err.message || 'LTA Telemetry Service Ready');
+        }
+        // Fallback simulation
+        runLocalSimulation(stopCode);
+      }
+    } catch {
+      setIsLiveApi(false);
+      runLocalSimulation(stopCode);
+    } finally {
+      setIsRefreshing(false);
+      setSecondsUntilRefresh(20);
+    }
+  };
+
+  const runLocalSimulation = (stopCode: string) => {
+    setStopsState((prevStops) =>
+      prevStops.map((stop) => {
+        if (stop.code !== stopCode) return stop;
+        return {
           ...stop,
           services: stop.services.map((svc) => {
             const nextMin = svc.nextBus.estimatedArrivalMin;
@@ -72,11 +134,33 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
               }
             };
           })
-        }))
-      );
-      setIsRefreshing(false);
-      setSecondsUntilRefresh(15);
-    }, 600);
+        };
+      })
+    );
+  };
+
+  // Initial and selected stop fetch
+  useEffect(() => {
+    fetchTelemetry(selectedStopCode, serviceFilter);
+  }, [selectedStopCode]);
+
+  // Live 20-second countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsUntilRefresh((prev) => {
+        if (prev <= 1) {
+          fetchTelemetry(selectedStopCode, serviceFilter);
+          return 20;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [selectedStopCode, serviceFilter]);
+
+  const triggerRefreshTelemetry = () => {
+    fetchTelemetry(selectedStopCode, serviceFilter);
   };
 
   const currentStop = stopsState.find((s) => s.code === selectedStopCode) || stopsState[0];
@@ -168,6 +252,23 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* API Integration Telemetry Status Badge */}
+        {apiNotice && (
+          <div className={`mt-3 px-3 py-2 rounded-[4px] text-xs flex items-center justify-between border ${
+            isLiveApi 
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+              : 'bg-[#fbf8ff] text-[#500062] border-[#d2c2d0]'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isLiveApi ? 'bg-emerald-600 animate-pulse' : 'bg-[#e05615]'}`} />
+              <span className="font-semibold">{apiNotice}</span>
+            </div>
+            <span className="text-[11px] font-mono opacity-80">
+              {isLiveApi ? 'LTA DataMall 20s cycle' : 'GET /api/bus-arrival'}
+            </span>
+          </div>
+        )}
 
         {/* Search Controls */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-5">
