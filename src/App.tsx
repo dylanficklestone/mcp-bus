@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab, BusStop, CivicAnnouncement } from './types/transit';
-import { INITIAL_BUS_STOPS, CIVIC_ANNOUNCEMENTS } from './data/transitData';
+import { CIVIC_ANNOUNCEMENTS } from './data/transitData';
+import { ALL_SINGAPORE_BUS_STOPS } from './data/singaporeBusStops';
 import { Header } from './components/Header';
 import { SidebarNav } from './components/SidebarNav';
 import { WhatsNewWidget } from './components/WhatsNewWidget';
@@ -26,7 +27,7 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('bus');
   const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
-  const [busStops, setBusStops] = useState<BusStop[]>(INITIAL_BUS_STOPS);
+  const [busStops, setBusStops] = useState<BusStop[]>(ALL_SINGAPORE_BUS_STOPS);
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('sg_transit_favorites');

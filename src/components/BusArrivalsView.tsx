@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BusStop, BusServiceArrival, BusLoad, BusType } from '../types/transit';
+import { getDestinationName, ALL_SINGAPORE_BUS_STOPS, DetailedBusStop } from '../data/singaporeBusStops';
 import { 
   Search, 
   RefreshCw, 
@@ -13,7 +14,10 @@ import {
   Clock, 
   SlidersHorizontal,
   ChevronDown,
-  Info
+  Info,
+  Layers,
+  ArrowRight,
+  X
 } from 'lucide-react';
 
 interface BusArrivalsViewProps {
@@ -35,11 +39,43 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
   const [stopsState, setStopsState] = useState<BusStop[]>(busStops);
   const [isLiveApi, setIsLiveApi] = useState<boolean>(false);
   const [apiNotice, setApiNotice] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<string>('All');
+  const [isAllStopsModalOpen, setIsAllStopsModalOpen] = useState<boolean>(false);
 
   // Synchronize when parent prop updates
   useEffect(() => {
     setStopsState(busStops);
   }, [busStops]);
+
+  const getStopRegion = (code: string) => {
+    return ALL_SINGAPORE_BUS_STOPS.find((s) => s.code === code)?.region || 'Central';
+  };
+
+  const regionCounts = {
+    All: stopsState.length,
+    Central: stopsState.filter((s) => getStopRegion(s.code) === 'Central').length,
+    West: stopsState.filter((s) => getStopRegion(s.code) === 'West').length,
+    North: stopsState.filter((s) => getStopRegion(s.code) === 'North').length,
+    East: stopsState.filter((s) => getStopRegion(s.code) === 'East').length,
+    'North-East': stopsState.filter((s) => getStopRegion(s.code) === 'North-East').length,
+  };
+
+  const stopsInRegion = selectedRegion === 'All'
+    ? stopsState
+    : stopsState.filter((s) => getStopRegion(s.code) === selectedRegion);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const q = searchQuery.trim();
+      if (/^\d{5}$/.test(q)) {
+        setSelectedStopCode(q);
+        setSearchQuery('');
+      } else if (filteredStops.length > 0) {
+        setSelectedStopCode(filteredStops[0].code);
+        setSearchQuery('');
+      }
+    }
+  };
 
   // Fetch live telemetry from /api/bus-arrival
   const fetchTelemetry = async (stopCode: string, svcFilter?: string) => {
@@ -57,40 +93,50 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
           setIsLiveApi(true);
           setApiNotice('Live LTA DataMall v3 Feed Active');
           setStopsState((prevStops) => {
-            const mappedServices: BusServiceArrival[] = data.formattedServices.map((fs: any) => ({
-              serviceNo: fs.serviceNo,
-              destinationName: `Dest Code ${fs.nextBus?.destinationCode || 'Loop'}`,
-              operator: (fs.operator === 'SBST' ? 'SBS Transit' : fs.operator === 'SMRT' ? 'SMRT Buses' : fs.operator === 'TTS' ? 'Tower Transit' : 'Go-Ahead') as any,
-              nextBus: {
-                estimatedArrivalMin: fs.nextBus?.estimatedArrivalMin ?? 0,
-                load: (fs.nextBus?.load || 'SEA') as any,
-                busType: (fs.nextBus?.type || 'SD') as any,
-                wheelchairAccessible: fs.nextBus?.feature === 'WAB'
-              },
-              subsequentBus: fs.nextBus2 ? {
-                estimatedArrivalMin: fs.nextBus2?.estimatedArrivalMin ?? 0,
-                load: (fs.nextBus2?.load || 'SEA') as any,
-                busType: (fs.nextBus2?.type || 'SD') as any,
-                wheelchairAccessible: fs.nextBus2?.feature === 'WAB'
-              } : undefined,
-              thirdBus: fs.nextBus3 ? {
-                estimatedArrivalMin: fs.nextBus3?.estimatedArrivalMin ?? 0,
-                load: (fs.nextBus3?.load || 'SEA') as any,
-                busType: (fs.nextBus3?.type || 'SD') as any,
-                wheelchairAccessible: fs.nextBus3?.feature === 'WAB'
-              } : undefined
-            }));
+            const mappedServices: BusServiceArrival[] = data.formattedServices.map((fs: any) => {
+              const destCode = fs.destinationCode || fs.nextBus?.destinationCode || fs.nextBus2?.destinationCode || '';
+              const resolvedDest = (fs.destinationName && !fs.destinationName.startsWith('Dest Code'))
+                ? fs.destinationName
+                : getDestinationName(destCode, fs.serviceNo);
+
+              return {
+                serviceNo: fs.serviceNo,
+                destinationName: resolvedDest,
+                operator: (fs.operator === 'SBST' ? 'SBS Transit' : fs.operator === 'SMRT' ? 'SMRT Buses' : fs.operator === 'TTS' ? 'Tower Transit' : 'Go-Ahead') as any,
+                nextBus: {
+                  estimatedArrivalMin: fs.nextBus?.estimatedArrivalMin ?? 0,
+                  load: (fs.nextBus?.load || 'SEA') as any,
+                  busType: (fs.nextBus?.type || 'SD') as any,
+                  wheelchairAccessible: fs.nextBus?.feature === 'WAB'
+                },
+                subsequentBus: fs.nextBus2 ? {
+                  estimatedArrivalMin: fs.nextBus2?.estimatedArrivalMin ?? 0,
+                  load: (fs.nextBus2?.load || 'SEA') as any,
+                  busType: (fs.nextBus2?.type || 'SD') as any,
+                  wheelchairAccessible: fs.nextBus2?.feature === 'WAB'
+                } : undefined,
+                thirdBus: fs.nextBus3 ? {
+                  estimatedArrivalMin: fs.nextBus3?.estimatedArrivalMin ?? 0,
+                  load: (fs.nextBus3?.load || 'SEA') as any,
+                  busType: (fs.nextBus3?.type || 'SD') as any,
+                  wheelchairAccessible: fs.nextBus3?.feature === 'WAB'
+                } : undefined
+              };
+            });
 
             const exists = prevStops.some((s) => s.code === stopCode);
             if (exists) {
               return prevStops.map((s) => (s.code === stopCode ? { ...s, services: mappedServices } : s));
             } else {
+              const known = ALL_SINGAPORE_BUS_STOPS.find((s) => s.code === stopCode);
               return [
                 ...prevStops,
                 {
                   code: stopCode,
-                  name: `Bus Stop ${stopCode}`,
-                  roadName: 'LTA Transit Network',
+                  name: known?.name || `Bus Stop ${stopCode}`,
+                  roadName: known?.roadName || 'Singapore Transit Network',
+                  nearbyLandmarks: known?.nearbyLandmarks,
+                  mrtInterchange: known?.mrtInterchange,
                   services: mappedServices
                 }
               ];
@@ -273,16 +319,27 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
         {/* Search Controls */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-5">
           <div className="md:col-span-8">
-            <label className="block text-xs font-bold text-[#1f1f23] uppercase tracking-wide mb-1.5">
-              Search by Bus Stop No., Road, or Landmark
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-[#1f1f23] uppercase tracking-wide">
+                Search Bus Stops ({stopsState.length} Total)
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsAllStopsModalOpen(true)}
+                className="text-xs font-bold text-[#6c1d7e] hover:text-[#500062] inline-flex items-center gap-1 underline underline-offset-2"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Browse Full Directory</span>
+              </button>
+            </div>
             <div className="relative">
               <Search className="w-4 h-4 text-[#686a73] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="e.g. 08057, Orchard Rd, Dhoby Ghaut, Bugis..."
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search by 5-digit Stop Code (e.g. 04121, 08057), Name, Road, or Landmark..."
                 className="w-full h-11 pl-10 pr-4 text-sm bg-white rounded-[4px] border border-[#dbe0e6] focus:border-2 focus:border-[#6c1d7e] focus:outline-none placeholder:text-[#686a73]"
               />
               {searchQuery && (
@@ -294,6 +351,26 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Direct 5-Digit Bus Stop Lookup Prompt */}
+            {/^\d{5}$/.test(searchQuery.trim()) && (
+              <div className="mt-2 p-2.5 bg-[#fff3eb] border border-[#fd6b2b] rounded-[4px] flex items-center justify-between">
+                <div className="text-xs text-[#1f1f23]">
+                  <strong className="text-[#e05615]">Bus Stop Code: {searchQuery.trim()}</strong>
+                  <span className="text-[#686a73] ml-2 font-normal">Click to query live LTA telemetry</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStopCode(searchQuery.trim());
+                    setSearchQuery('');
+                  }}
+                  className="px-3 py-1 bg-[#e05615] hover:bg-[#c8470a] text-white text-xs font-bold rounded-[3px] transition-colors"
+                >
+                  Load Stop {searchQuery.trim()}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="md:col-span-4">
@@ -305,7 +382,7 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
                 type="text"
                 value={serviceFilter}
                 onChange={(e) => setServiceFilter(e.target.value)}
-                placeholder="e.g. 7, 14, 190, 960..."
+                placeholder="e.g. 124, 143, 174, 190, 7..."
                 className="w-full h-11 px-3.5 text-sm bg-white rounded-[4px] border border-[#dbe0e6] focus:border-2 focus:border-[#6c1d7e] focus:outline-none placeholder:text-[#686a73]"
               />
               {serviceFilter && (
@@ -320,30 +397,67 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
           </div>
         </div>
 
-        {/* Quick Hub Selector Buttons */}
-        <div className="mt-4 pt-4 border-t border-[#f0f2f5] flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-[#686a73]">Major Interchanges:</span>
-          {stopsState.slice(0, 6).map((stop) => (
-            <button
-              key={stop.code}
-              onClick={() => {
-                setSelectedStopCode(stop.code);
-                setSearchQuery('');
-              }}
-              className={`px-2.5 py-1 text-xs rounded-[4px] font-semibold transition-colors border ${
-                selectedStopCode === stop.code
-                  ? 'bg-[#6c1d7e] text-white border-[#6c1d7e]'
-                  : 'bg-[#f0f2f5] text-[#1f1f23] border-[#dbe0e6] hover:bg-[#e9ecef]'
-              }`}
-            >
-              {stop.name.split(' ')[0]} ({stop.code})
-            </button>
-          ))}
+        {/* Region Filter Bar & Stop Selector */}
+        <div className="mt-4 pt-4 border-t border-[#f0f2f5] space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-[#686a73] mr-1">Region:</span>
+              {(['All', 'Central', 'West', 'North', 'East', 'North-East'] as const).map((reg) => (
+                <button
+                  key={reg}
+                  type="button"
+                  onClick={() => setSelectedRegion(reg)}
+                  className={`px-2.5 py-1 text-xs rounded-[4px] font-semibold transition-colors border ${
+                    selectedRegion === reg
+                      ? 'bg-[#500062] text-white border-[#500062]'
+                      : 'bg-[#f0f2f5] text-[#1f1f23] border-[#dbe0e6] hover:bg-[#e9ecef]'
+                  }`}
+                >
+                  {reg === 'All' ? `All (${stopsState.length})` : `${reg} (${regionCounts[reg]})`}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-xs text-[#686a73]">
+              Showing {stopsInRegion.length} stops
+            </span>
+          </div>
+
+          {/* Bus Stop Selector Pills for Current Region */}
+          <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-[#fbf8ff] rounded-[4px] border border-[#d2c2d0]">
+            {stopsInRegion.map((stop) => {
+              const isSelected = selectedStopCode === stop.code;
+              return (
+                <button
+                  key={stop.code}
+                  type="button"
+                  onClick={() => {
+                    setSelectedStopCode(stop.code);
+                    setSearchQuery('');
+                  }}
+                  className={`px-2.5 py-1.5 text-xs rounded-[4px] font-medium transition-colors border flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-[#6c1d7e] text-white border-[#6c1d7e] font-bold shadow-xs'
+                      : 'bg-white text-[#1f1f23] border-[#dbe0e6] hover:border-[#6c1d7e] hover:bg-[#f4eaf7]'
+                  }`}
+                >
+                  <strong className={isSelected ? 'text-[#fed6ff]' : 'text-[#500062]'}>
+                    {stop.code}
+                  </strong>
+                  <span className="truncate max-w-[150px]">{stop.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* If user searched and found multiple stops, provide selection list */}
         {searchQuery && filteredStops.length > 0 && (
-          <div className="mt-3 p-2 bg-[#fbf8ff] rounded-[4px] border border-[#d2c2d0] max-h-48 overflow-y-auto divide-y divide-[#e9ecef]">
+          <div className="mt-3 p-2 bg-white rounded-[4px] border-2 border-[#6c1d7e] max-h-56 overflow-y-auto divide-y divide-[#e9ecef] shadow-sm">
+            <div className="px-3 py-1.5 text-[11px] font-bold text-[#500062] bg-[#f4eaf7] uppercase tracking-wider flex justify-between">
+              <span>Matching Stops ({filteredStops.length})</span>
+              <span>Click to select</span>
+            </div>
             {filteredStops.map((stop) => (
               <button
                 key={stop.code}
@@ -351,14 +465,19 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
                   setSelectedStopCode(stop.code);
                   setSearchQuery('');
                 }}
-                className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-white rounded-[3px] transition-colors"
+                className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-[#fbf8ff] rounded-[3px] transition-colors"
               >
                 <div>
                   <strong className="text-[#500062] font-mono mr-2">{stop.code}</strong>
                   <span className="font-semibold text-[#1f1f23]">{stop.name}</span>
                   <span className="text-[#686a73] ml-2 font-normal">({stop.roadName})</span>
+                  {stop.mrtInterchange && (
+                    <span className="ml-2 text-[10px] text-[#6c1d7e] font-semibold bg-[#f4eaf7] px-1.5 py-0.5 rounded">
+                      {stop.mrtInterchange}
+                    </span>
+                  )}
                 </div>
-                <span className="text-[11px] text-[#6c1d7e] font-semibold">
+                <span className="text-[11px] text-[#6c1d7e] font-semibold shrink-0">
                   {stop.services.length} services
                 </span>
               </button>
@@ -479,7 +598,9 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
                     </div>
                     <div>
                       <h4 className="font-heading font-bold text-sm text-[#1f1f23] leading-tight">
-                        To {svc.destinationName}
+                        To {svc.destinationName?.startsWith('Dest Code ')
+                          ? getDestinationName(svc.destinationName.replace('Dest Code ', '').trim(), svc.serviceNo)
+                          : (svc.destinationName || 'Terminus')}
                       </h4>
                       <p className="text-[11px] text-[#686a73] font-medium mt-0.5">
                         {svc.operator}
@@ -589,6 +710,119 @@ export const BusArrivalsView: React.FC<BusArrivalsViewProps> = ({
           <span>Showing {displayedServices.length} active service routes at this stop.</span>
         </div>
       </div>
+
+      {/* Full Singapore Bus Stops Directory Modal */}
+      {isAllStopsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div 
+            className="bg-white rounded-[8px] max-w-4xl w-full border border-[#dbe0e6] overflow-hidden modal-shadow flex flex-col max-h-[85vh]"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Modal Header */}
+            <div className="bg-[#5e1770] p-4 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-[#fd6b2b]" />
+                <div>
+                  <h3 className="font-heading font-bold text-base text-white">
+                    Full Singapore Bus Stops Directory ({stopsState.length} Stops)
+                  </h3>
+                  <p className="text-[11px] text-white/80">
+                    Select any bus stop to view real-time arrival telemetry and destination details
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAllStopsModalOpen(false)}
+                aria-label="Close directory"
+                className="w-8 h-8 rounded-[4px] bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Region Filter Bar in Modal */}
+            <div className="p-3 bg-[#f0f2f5] border-b border-[#dbe0e6] flex flex-wrap items-center gap-1.5 shrink-0">
+              <span className="text-xs font-bold text-[#1f1f23] mr-2">Filter Region:</span>
+              {(['All', 'Central', 'West', 'North', 'East', 'North-East'] as const).map((reg) => (
+                <button
+                  key={reg}
+                  type="button"
+                  onClick={() => setSelectedRegion(reg)}
+                  className={`px-3 py-1 text-xs rounded-[4px] font-semibold transition-colors border ${
+                    selectedRegion === reg
+                      ? 'bg-[#6c1d7e] text-white border-[#6c1d7e]'
+                      : 'bg-white text-[#1f1f23] border-[#dbe0e6] hover:bg-[#e9ecef]'
+                  }`}
+                >
+                  {reg === 'All' ? `All (${stopsState.length})` : `${reg} (${regionCounts[reg]})`}
+                </button>
+              ))}
+            </div>
+
+            {/* Stops Grid in Modal */}
+            <div className="p-4 overflow-y-auto grow">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {stopsInRegion.map((stop) => {
+                  const isCurrent = selectedStopCode === stop.code;
+                  return (
+                    <button
+                      key={stop.code}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStopCode(stop.code);
+                        setIsAllStopsModalOpen(false);
+                      }}
+                      className={`p-3 rounded-[6px] border text-left transition-all flex flex-col justify-between ${
+                        isCurrent
+                          ? 'border-[#6c1d7e] bg-[#fbf8ff] ring-2 ring-[#6c1d7e]/20'
+                          : 'border-[#dbe0e6] bg-white hover:border-[#6c1d7e] hover:bg-[#fbf8ff]'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-mono font-bold text-xs bg-[#500062] text-white px-2 py-0.5 rounded-[3px]">
+                            {stop.code}
+                          </span>
+                          <span className="text-[10px] text-[#6c1d7e] font-semibold">
+                            {getStopRegion(stop.code)}
+                          </span>
+                        </div>
+                        <h4 className="font-heading font-bold text-xs text-[#1f1f23] line-clamp-1 mt-1">
+                          {stop.name}
+                        </h4>
+                        <p className="text-[11px] text-[#686a73] line-clamp-1 mt-0.5">
+                          {stop.roadName}
+                        </p>
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-[#f0f2f5] flex items-center justify-between text-[10px] text-[#686a73]">
+                        <span>{stop.services.length} services</span>
+                        <span className="text-[#e05615] font-bold inline-flex items-center gap-0.5">
+                          Select <ArrowRight className="w-2.5 h-2.5" />
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-[#f0f2f5] border-t border-[#dbe0e6] flex items-center justify-between shrink-0 text-xs text-[#686a73]">
+              <span>Tip: You can also search by any 5-digit bus stop code directly in the main search bar.</span>
+              <button
+                type="button"
+                onClick={() => setIsAllStopsModalOpen(false)}
+                className="px-4 py-1.5 bg-[#500062] hover:bg-[#6c1d7e] text-white font-bold text-xs rounded-[4px] transition-colors"
+              >
+                Close Directory
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -187,3 +187,12 @@ i will add the LTA_ACCOUNT_KEY in vercel environment variables later
 ```text
 create a prompt.md containing all my prompts located at project main
 ```
+
+---
+
+## Prompt 5: Bus Destination Name Resolution & Full Bus Stops List
+
+```text
+why is the webpage showing me this instead of the actual destination. in addition, it only shows a limited number of bus stops instead of showing the full list of bus stops. can you please fix this?
+```
+

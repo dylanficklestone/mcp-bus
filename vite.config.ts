@@ -45,6 +45,11 @@ function apiDevMiddleware(): Plugin {
             return await busModule.default(reqObj, resObj);
           }
 
+          if (pathname === '/api/bus-stops' || pathname === '/api/busStops') {
+            const stopsModule = await import('./api/bus-stops.js');
+            return await stopsModule.default(reqObj, resObj);
+          }
+
           return next();
         } catch (err: any) {
           res.statusCode = 500;

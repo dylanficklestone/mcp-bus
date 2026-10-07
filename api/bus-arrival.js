@@ -78,6 +78,90 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
+    // Destination resolution dictionary for Singapore Bus Terminals & Interchanges
+    const DESTINATION_NAMES = {
+      '01012': 'Hotel Grand Pacific (Victoria St)',
+      '01113': 'Bugis Stn Exit A',
+      '02049': 'Marina Centre Ter',
+      '02059': 'Marina Centre Ter (Raffles Ave)',
+      '03019': 'Shenton Way Ter',
+      '03211': 'Opp The Treasury (High St)',
+      '03509': 'Marina Bay Sands Hotel',
+      '04121': 'Clarke Quay Stn Exit E',
+      '04179': 'Boat Quay',
+      '05019': 'Chinatown Stn Exit E',
+      '05419': 'New Bridge Rd Ter',
+      '08057': 'Dhoby Ghaut Stn Exit B',
+      '09047': 'Orchard Stn / Tang Plaza',
+      '09048': 'Orchard Stn / Lucky Plaza',
+      '09111': 'Somerset Stn',
+      '10009': 'HarbourFront Ter',
+      '10499': 'Kampong Bahru Ter',
+      '14009': 'HarbourFront Int',
+      '14141': 'VivoCity',
+      '16009': 'Bukit Merah Int',
+      '17009': 'Clementi Int',
+      '19009': 'Buona Vista Ter',
+      '20009': 'Ghim Moh Ter',
+      '22009': 'Boon Lay Int',
+      '25009': 'Joo Koon Int',
+      '28009': 'Jurong East Int',
+      '40009': 'Bukit Batok Int',
+      '43009': 'Choa Chu Kang Int',
+      '44009': 'Bukit Panjang Int',
+      '46009': 'Woodlands Temp Int',
+      '48009': 'Sembawang Int',
+      '52009': 'Toa Payoh Int',
+      '54009': 'Bishan Int',
+      '55009': 'Ang Mo Kio Int',
+      '59009': 'Yishun Int',
+      '60009': "St. Michael's Ter",
+      '64009': 'Hougang Central Int',
+      '65009': 'Sengkang Int',
+      '66009': 'Serangoon Int',
+      '67009': 'Punggol Temp Int',
+      '70009': 'Lor 1 Geylang Ter',
+      '75009': 'Tampines Int',
+      '76009': 'Tampines Concourse Int',
+      '77009': 'Pasir Ris Int',
+      '80009': 'Sims Place Ter',
+      '84009': 'Bedok Int',
+      '85009': 'Eunos Int',
+      '92009': 'Marine Parade Ter',
+      '95009': 'Changi Airport PTB2',
+      '95129': 'Changi Airport PTB1',
+      '95109': 'Changi Airport PTB3',
+      '95019': 'Changi Airport PTB4',
+      '97009': 'Changi Village Ter',
+      '99009': 'Tuas Bus Ter'
+    };
+
+    const SERVICE_TERMINALS = {
+      '7': 'Bedok Int / Clementi Int',
+      '14': 'Bedok Int / Clementi Int',
+      '16': 'Bedok Int / Bukit Merah Int',
+      '65': 'Tampines Int / HarbourFront Int',
+      '106': 'Shenton Way Ter / Bukit Batok Int',
+      '111': 'Ghim Moh Ter (Loop)',
+      '123': 'Bukit Merah Int / HarbourFront',
+      '124': "St. Michael's Ter / HarbourFront Int",
+      '143': 'Toa Payoh Int / Jurong East Int',
+      '147': 'Hougang Central Int / Clementi Int',
+      '166': 'Ang Mo Kio Int / Clementi Int',
+      '174': 'Boon Lay Int / Kampong Bahru Ter',
+      '190': 'Choa Chu Kang Int / Kampong Bahru Ter',
+      '502': 'Pioneer Rd North / Suntec City',
+      '857': 'Yishun Int / Suntec City',
+      '960': 'Woodlands Temp Int / Marina Centre Ter'
+    };
+
+    const resolveDestination = (destCode, serviceNo) => {
+      if (!destCode || destCode === '0' || destCode === '') return 'Loop Service';
+      if (DESTINATION_NAMES[destCode]) return DESTINATION_NAMES[destCode];
+      if (serviceNo && SERVICE_TERMINALS[serviceNo]) return SERVICE_TERMINALS[serviceNo];
+      return `Terminus (${destCode})`;
+    };
+
     // Helper to calculate minutes difference from ISO 8601 string
     const calcMinutesRemaining = (estimatedIso) => {
       if (!estimatedIso) return null;
@@ -106,9 +190,13 @@ export default async function handler(req, res) {
         };
       };
 
+      const destCode = s.NextBus?.DestinationCode || s.NextBus2?.DestinationCode || s.NextBus3?.DestinationCode || '';
+
       return {
         serviceNo: s.ServiceNo,
         operator: s.Operator,
+        destinationCode: destCode,
+        destinationName: resolveDestination(destCode, s.ServiceNo),
         nextBus: parseBus(s.NextBus),
         nextBus2: parseBus(s.NextBus2),
         nextBus3: parseBus(s.NextBus3)
