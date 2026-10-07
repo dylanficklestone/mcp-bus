@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-body: 'Roboto Flex', system-ui, -apple-system, sans-serif;
+    --color-primary: #500062;
+    --color-primary-container: #6c1d7e;
+    --color-transit-purple-deep: #5e1770;
+    --color-transit-purple-light: #f4eaf7;
+    --color-cta-orange: #e05615;
+    --color-cta-orange-hover: #c8470a;
+    --color-cta-orange-subtle: #fff3eb;
+    --color-slate-bg: #f0f2f5;
+    --color-border-subtle: #dbe0e6;
+    --color-text-primary: #1f1f23;
+    --color-text-muted: #686a73;
+  }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--color-text-primary);
+    background-color: var(--color-slate-bg);
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: var(--font-heading);
+  }
+}
+
+.text-scale-sm {
+  font-size: 13.5px;
+}
+.text-scale-base {
+  font-size: 15px;
+}
+.text-scale-lg {
+  font-size: 16.5px;
+}
+
+.card-shadow {
+  box-shadow: 0 2px 6px -1px rgba(23, 20, 35, 0.06), 0 1px 3px -1px rgba(23, 20, 35, 0.04);
+}
+
+.modal-shadow {
+  box-shadow: 0 8px 20px -3px rgba(35, 12, 45, 0.12), 0 3px 6px -2px rgba(35, 12, 45, 0.08);
+}
+

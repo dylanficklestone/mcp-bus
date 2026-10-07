@@ -1,0 +1,6 @@
+{
+  "name": "Public Transit & Commuter Portal",
+  "description": "Civic commuter journey planner, real-time bus arrival telemetry, MRT rail line status, interchange guides, and distance-based fare calculator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
